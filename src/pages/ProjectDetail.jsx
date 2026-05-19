@@ -13,10 +13,12 @@ import { PageHeader, ProgressBar, StatusBadge, Badge, SectionTitle, EmptyState }
 import Avatar from '../components/Avatar'
 import ProjectFormModal from '../components/ProjectFormModal'
 import TaskFormModal from '../components/TaskFormModal'
+import { useUI } from '../store/UIContext'
 
 export default function ProjectDetail() {
   const { id } = useParams()
   const { projectById, tasks, memberById, teamById } = useStore()
+  const ui = useUI()
   const project = projectById[id]
   const projTasks = useMemo(() => tasks.filter(t => t.projectId === id), [tasks, id])
 
@@ -172,7 +174,7 @@ export default function ProjectDetail() {
             <tbody>
               {projTasks.map(t => (
                 <tr key={t.id} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-                    onClick={() => setTaskEdit(t)}>
+                    onClick={() => ui.openTaskDetail(t.id)}>
                   <td className="py-2.5 pr-3 font-medium text-slate-800">{t.title}</td>
                   <td className="py-2.5 pr-3">
                     <span className="inline-flex items-center gap-1.5">

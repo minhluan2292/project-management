@@ -492,7 +492,7 @@ function CellDetailModal({ detail, onClose, projectById }) {
             <button
               key={task.id}
               type="button"
-              onClick={() => { onClose(); ui.openEditTask(task) }}
+              onClick={() => { onClose(); ui.openTaskDetail(task.id) }}
               className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-brand-200 hover:bg-slate-50 transition">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">

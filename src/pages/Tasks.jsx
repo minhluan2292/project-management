@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Plus, Search, LayoutGrid, List, Filter, Clock, MessageSquare, GitBranch } from 'lucide-react'
+import { Plus, Search, LayoutGrid, List, Filter, Clock, MessageSquare, GitBranch, Pencil, ChevronDown, X } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import {
   taskStatusMeta, priorityMeta,
@@ -9,11 +9,16 @@ import { PageHeader, Badge } from '../components/UI'
 import Avatar from '../components/Avatar'
 import { SearchableSelect } from '../components/SearchableSelect'
 import TaskFormModal from '../components/TaskFormModal'
+import { useUI } from '../store/UIContext'
 
 const COLUMNS = ['backlog','todo','in_progress','review','done']
 
 export default function Tasks() {
-  const { tasks: allTasks, projects, members, memberById, projectById, upsertTask } = useStore()
+  const {
+    tasks: allTasks, projects, members, memberById, projectById,
+    upsertTask, updateTask, deleteTask, subtasks, comments
+  } = useStore()
+  const ui = useUI()
   const [view, setView]         = useState('kanban')
   const [q, setQ]               = useState('')
   const [projectId, setProject] = useState('all')
@@ -21,6 +26,18 @@ export default function Tasks() {
   const [priority, setPriority] = useState('all')
   const [taskEdit, setTaskEdit] = useState(null)
   const [dragOver, setDragOver] = useState(null)
+  const [selectedIds, setSelectedIds] = useState([])
+
+  const subtaskCounts = useMemo(() => {
+    const m = {}
+    for (const s of subtasks) m[s.taskId] = (m[s.taskId] || 0) + 1
+    return m
+  }, [subtasks])
+  const commentCounts = useMemo(() => {
+    const m = {}
+    for (const c of comments) m[c.taskId] = (m[c.taskId] || 0) + 1
+    return m
+  }, [comments])
 
   const filtered = useMemo(() => {
     return allTasks.filter(t => {
@@ -32,11 +49,31 @@ export default function Tasks() {
     })
   }, [allTasks, q, projectId, assignee, priority])
 
+  // Clear bulk selection when leaving list view
+  const switchView = (v) => { setView(v); setSelectedIds([]) }
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+  const allFilteredSelected = filtered.length > 0 && selectedIds.length === filtered.length
+  const toggleSelectAll = () => {
+    setSelectedIds(allFilteredSelected ? [] : filtered.map(t => t.id))
+  }
+  const bulkUpdate = (patch) => {
+    selectedIds.forEach(id => updateTask(id, patch))
+  }
+  const bulkDelete = () => {
+    if (!confirm(`Xoá ${selectedIds.length} task?`)) return
+    selectedIds.forEach(id => deleteTask(id))
+    setSelectedIds([])
+  }
+
   const moveTask = (taskId, newStatus) => {
     const t = allTasks.find(x => x.id === taskId)
     if (!t || t.status === newStatus) return
-    upsertTask({ ...t, status: newStatus })
+    updateTask(taskId, { status: newStatus })
   }
+
+  const openTask = (t) => ui.openTaskDetail(t.id)
 
   return (
     <div>
@@ -99,23 +136,48 @@ export default function Tasks() {
           {Object.keys(priorityMeta).map(p => <option key={p} value={p}>{priorityMeta[p].label}</option>)}
         </select>
         <div className="col-span-2 md:col-auto flex items-center bg-slate-100 rounded-lg p-0.5 self-start md:self-auto md:ml-auto">
-          <button onClick={() => setView('kanban')}
+          <button onClick={() => switchView('kanban')}
             className={classNames('px-2 py-1 rounded-md', view === 'kanban' && 'bg-white shadow-sm')}>
             <LayoutGrid size={16} />
           </button>
-          <button onClick={() => setView('list')}
+          <button onClick={() => switchView('list')}
             className={classNames('px-2 py-1 rounded-md', view === 'list' && 'bg-white shadow-sm')}>
             <List size={16} />
           </button>
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {view === 'list' && selectedIds.length > 0 && (
+        <div className="card p-3 mb-3 flex flex-wrap items-center gap-2 bg-brand-50/40 border-brand-200">
+          <span className="text-sm font-semibold text-slate-700 mr-2">
+            Đã chọn {selectedIds.length}
+          </span>
+          <BulkAction label="Đặt trạng thái" options={Object.entries(taskStatusMeta).map(([v, m]) => ({ value: v, label: m.label }))}
+            onPick={(v) => bulkUpdate({ status: v })} />
+          <BulkAction label="Đổi ưu tiên" options={Object.entries(priorityMeta).map(([v, m]) => ({ value: v, label: m.label }))}
+            onPick={(v) => bulkUpdate({ priority: v })} />
+          <BulkAction label="Giao cho" options={members.map(m => ({ value: m.id, label: m.name }))}
+            onPick={(v) => bulkUpdate({ assigneeId: v })} />
+          <button onClick={bulkDelete} className="ml-auto text-sm text-rose-600 hover:underline px-2 py-1">
+            <X size={14} className="inline -mt-0.5 mr-0.5"/> Xoá
+          </button>
+          <button onClick={() => setSelectedIds([])} className="text-sm text-slate-500 hover:underline px-2 py-1">
+            Bỏ chọn
+          </button>
+        </div>
+      )}
+
       {view === 'kanban'
         ? <Kanban tasks={filtered} projectById={projectById} memberById={memberById}
-                  onCard={setTaskEdit} onAdd={() => setTaskEdit(undefined)}
+                  subtaskCounts={subtaskCounts} commentCounts={commentCounts}
+                  onCard={openTask} onAdd={() => setTaskEdit(undefined)}
                   onMove={moveTask} dragOver={dragOver} setDragOver={setDragOver} />
         : <ListView tasks={filtered} projectById={projectById} memberById={memberById}
-                    onRow={setTaskEdit} />
+                    subtaskCounts={subtaskCounts} commentCounts={commentCounts}
+                    onRow={openTask} onEdit={setTaskEdit}
+                    selectedIds={selectedIds} toggleSelect={toggleSelect}
+                    allSelected={allFilteredSelected} toggleAll={toggleSelectAll} />
       }
 
       <TaskFormModal
@@ -128,7 +190,7 @@ export default function Tasks() {
   )
 }
 
-function Kanban({ tasks, projectById, memberById, onCard, onAdd, onMove, dragOver, setDragOver }) {
+function Kanban({ tasks, projectById, memberById, subtaskCounts, commentCounts, onCard, onAdd, onMove, dragOver, setDragOver }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
       {COLUMNS.map(col => {
@@ -166,6 +228,8 @@ function Kanban({ tasks, projectById, memberById, onCard, onAdd, onMove, dragOve
               {colTasks.map(t => (
                 <KanbanCard key={t.id} task={t}
                             projectById={projectById} memberById={memberById}
+                            subtaskCount={subtaskCounts[t.id] || 0}
+                            commentCount={commentCounts[t.id] || 0}
                             onClick={() => onCard(t)} />
               ))}
               {colTasks.length === 0 && (
@@ -181,7 +245,7 @@ function Kanban({ tasks, projectById, memberById, onCard, onAdd, onMove, dragOve
   )
 }
 
-function KanbanCard({ task, projectById, memberById, onClick }) {
+function KanbanCard({ task, projectById, memberById, subtaskCount, commentCount, onClick }) {
   const proj = projectById[task.projectId]
   const today = '2026-05-19'
   const overdue = task.dueDate < today && task.status !== 'done'
@@ -215,11 +279,11 @@ function KanbanCard({ task, projectById, memberById, onClick }) {
           <span className={overdue ? 'text-rose-600 font-semibold' : ''}>
             <Clock size={11} className="inline -mt-0.5 mr-0.5"/>{fmtDate(task.dueDate)}
           </span>
-          {task.subtaskCount > 0 && (
-            <span><GitBranch size={11} className="inline -mt-0.5 mr-0.5"/>{task.subtaskCount}</span>
+          {subtaskCount > 0 && (
+            <span><GitBranch size={11} className="inline -mt-0.5 mr-0.5"/>{subtaskCount}</span>
           )}
-          {task.commentCount > 0 && (
-            <span><MessageSquare size={11} className="inline -mt-0.5 mr-0.5"/>{task.commentCount}</span>
+          {commentCount > 0 && (
+            <span><MessageSquare size={11} className="inline -mt-0.5 mr-0.5"/>{commentCount}</span>
           )}
         </div>
         {assignee && <Avatar name={assignee.name} size="xs" />}
@@ -228,7 +292,8 @@ function KanbanCard({ task, projectById, memberById, onClick }) {
   )
 }
 
-function ListView({ tasks, projectById, memberById, onRow }) {
+function ListView({ tasks, projectById, memberById, subtaskCounts, commentCounts,
+                    onRow, onEdit, selectedIds, toggleSelect, allSelected, toggleAll }) {
   const today = '2026-05-19'
   return (
     <div className="card overflow-hidden">
@@ -236,6 +301,10 @@ function ListView({ tasks, projectById, memberById, onRow }) {
         <table className="w-full text-sm min-w-[900px]">
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
+            <th className="px-3 py-3 w-10">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll}
+                className="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+            </th>
             <th className="text-left px-4 py-3">Task</th>
             <th className="text-left px-4 py-3">Dự án</th>
             <th className="text-left px-4 py-3">Trạng thái</th>
@@ -243,6 +312,7 @@ function ListView({ tasks, projectById, memberById, onRow }) {
             <th className="text-left px-4 py-3">Phụ trách</th>
             <th className="text-left px-4 py-3">Hạn</th>
             <th className="text-left px-4 py-3">Time</th>
+            <th className="text-left px-4 py-3 w-10"></th>
           </tr>
         </thead>
         <tbody>
@@ -250,10 +320,33 @@ function ListView({ tasks, projectById, memberById, onRow }) {
             const overdue = t.dueDate < today && t.status !== 'done'
             const assignee = memberById[t.assigneeId]
             const proj = projectById[t.projectId]
+            const checked = selectedIds.includes(t.id)
+            const sc = subtaskCounts[t.id] || 0
+            const cc = commentCounts[t.id] || 0
             return (
-              <tr key={t.id} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-                  onClick={() => onRow(t)}>
-                <td className="px-4 py-3 font-medium text-slate-800">{t.title}</td>
+              <tr key={t.id}
+                  className={classNames(
+                    'border-t border-slate-100 hover:bg-slate-50 cursor-pointer',
+                    checked && 'bg-brand-50/40'
+                  )}
+                  onClick={(e) => {
+                    // ignore click when on checkbox or edit btn
+                    if (e.target.closest('[data-stop]')) return
+                    onRow(t)
+                  }}>
+                <td className="px-3 py-3" data-stop onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleSelect(t.id)}
+                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="font-medium text-slate-800">{t.title}</div>
+                  {(sc > 0 || cc > 0) && (
+                    <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+                      {sc > 0 && <span><GitBranch size={11} className="inline -mt-0.5"/> {sc}</span>}
+                      {cc > 0 && <span><MessageSquare size={11} className="inline -mt-0.5"/> {cc}</span>}
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-xs">
                   {proj && <span className="font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{proj.code}</span>}
                 </td>
@@ -276,12 +369,43 @@ function ListView({ tasks, projectById, memberById, onRow }) {
                   {fmtDate(t.dueDate)}
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600">{t.spentHours}/{t.estimateHours}h</td>
+                <td className="px-4 py-3" data-stop onClick={(e) => e.stopPropagation()}>
+                  <button className="btn-ghost !p-1.5" onClick={() => onEdit(t)} title="Sửa form">
+                    <Pencil size={14} />
+                  </button>
+                </td>
               </tr>
             )
           })}
         </tbody>
       </table>
       </div>
+    </div>
+  )
+}
+
+function BulkAction({ label, options, onPick }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(v => !v)}
+        className="btn-outline !py-1 !px-2.5 text-sm">
+        {label} <ChevronDown size={14} className="opacity-70" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-64 overflow-y-auto">
+            {options.map(o => (
+              <button key={o.value}
+                onClick={() => { onPick(o.value); setOpen(false) }}
+                className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50">
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

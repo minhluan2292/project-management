@@ -8,6 +8,7 @@ import Calendar from './pages/Calendar'
 import Timeline from './pages/Timeline'
 import Team from './pages/Team'
 import Workload from './pages/Workload'
+import MyTasks from './pages/MyTasks'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 
@@ -16,6 +17,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/"                index element={<Dashboard />} />
+        <Route path="/my-tasks"        element={<MyTasks />} />
         <Route path="/projects"        element={<Projects />} />
         <Route path="/projects/:id"    element={<ProjectDetail />} />
         <Route path="/tasks"           element={<Tasks />} />

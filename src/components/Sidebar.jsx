@@ -1,12 +1,13 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, ListChecks, Calendar,
-  GanttChartSquare, Users, BarChart3, Settings, Boxes, Gauge, X
+  GanttChartSquare, Users, BarChart3, Settings, Boxes, Gauge, X, UserCheck
 } from 'lucide-react'
 import { classNames } from '../lib/utils'
 
 const nav = [
   { to: '/',          label: 'Dashboard',   icon: LayoutDashboard },
+  { to: '/my-tasks',  label: 'Việc của tôi', icon: UserCheck },
   { to: '/projects',  label: 'Dự án',       icon: FolderKanban },
   { to: '/tasks',     label: 'Công việc',   icon: ListChecks },
   { to: '/calendar',  label: 'Lịch',        icon: Calendar },
